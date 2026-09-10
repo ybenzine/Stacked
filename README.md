@@ -10,6 +10,29 @@ profile is reused to tag the cards you create and the work you're assigned.
 
 See [`_docs/specs.md`](_docs/specs.md) for the full product spec.
 
+## Screenshots
+
+### Board view
+
+Columns for each workflow stage, cards tagged with assignee, effort, and labels,
+quick-add from any column, and a filter/search bar.
+
+![Board view](_docs/images/board-view.jpg)
+
+### Card view
+
+Full card editor — title, description, assignee, effort, status, labels,
+delete-with-confirm, and the auto-generated, read-only activity log.
+
+![Card view](_docs/images/card-view.jpg)
+
+### Admin section
+
+CRUD for roles, labels, boards, statuses, and effort levels, plus user
+active/inactive. Deletions of roles, labels, and effort levels cascade.
+
+![Admin section](_docs/images/admin-section.jpg)
+
 ## Highlights
 
 - **Multiple boards** for different projects or teams. Boards are never deleted,
