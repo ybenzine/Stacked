@@ -16,3 +16,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # Both are raised inside Starlette 1.6's own testclient module when FastAPI's
+    # TestClient is imported; neither originates in our code. Fixed upstream in a
+    # later Starlette release -- revisit when fastapi/starlette are bumped.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:UserWarning",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
