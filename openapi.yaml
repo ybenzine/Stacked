@@ -1,0 +1,1166 @@
+openapi: 3.1.0
+
+info:
+  title: Stacked API
+  version: 1.0.0
+  description: >
+    Backend contract for the Stacked Kanban frontend.
+
+
+    This document is derived from the frontend's API client
+    (`frontend/src/api/client.ts`, `frontend/src/api/types.ts`), which today runs
+    against an in-memory mock. Every network call the app makes goes through the
+    `api` object in that client; each method here maps to one endpoint. The
+    request/response shapes are the contract a real backend must honour.
+
+
+    ## Identification, not authentication
+
+    Per the product spec there are no passwords, sessions, or permission tiers.
+    A user is *identified* by creating (or re-attaching to) a profile via
+    `POST /users`. From that point the client holds a "current user" id and sends
+    it on every mutating request in the `X-Actor-Id` header. The server uses it
+    only for attribution — `creator_id` on new cards and `user_id` on activity
+    log entries.
+
+
+    Endpoints are marked **auth required** when they need a valid `X-Actor-Id`
+    (all writes that produce attributed data, plus admin/reference-data writes).
+    Read endpoints and the identification endpoints need no header. There is no
+    role gating: any identified user may call any endpoint, including admin ones.
+
+servers:
+  - url: /api
+    description: Same-origin API root
+
+tags:
+  - name: Bootstrap
+  - name: Users
+  - name: Roles
+  - name: Labels
+  - name: Effort Levels
+  - name: Statuses
+  - name: Boards
+  - name: Cards
+  - name: Dev
+
+security: []
+
+paths:
+  # ------------------------------------------------------------------ bootstrap
+  /bootstrap:
+    get:
+      tags: [Bootstrap]
+      operationId: getBootstrap
+      summary: Fetch all reference data in one call
+      description: >
+        Returns every user, role, board, status, label and effort level.
+        `statuses` and `effortLevels` are returned sorted by ascending
+        `position`. Called once on app load. No auth.
+      responses:
+        "200":
+          description: Reference data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bootstrap"
+
+  # --------------------------------------------------------------------- users
+  /users/by-email:
+    get:
+      tags: [Users]
+      operationId: findUserByEmail
+      summary: Look up a user by email (case-insensitive, trimmed)
+      description: >
+        Used during identification on a new device to re-attach to an existing
+        profile. No auth.
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Matching user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: No user with that email. The client treats this as `null`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /users:
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a profile, or re-attach to an existing one by email
+      description: >
+        Identification entry point. If a user with the given email already
+        exists (case-insensitive), that record is updated with the supplied
+        name/role/color/emoji, re-activated, and returned with `200`. Otherwise a
+        new user is created and returned with `201`. No auth — this is how a
+        caller becomes identified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewUserInput"
+      responses:
+        "200":
+          description: Existing profile re-attached and updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "201":
+          description: New profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/userId"
+    patch:
+      tags: [Users]
+      operationId: setUserActive
+      summary: Mark a user active or inactive (admin)
+      description: >
+        Inactive users are hidden from assignee pickers but keep their history.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --------------------------------------------------------------------- roles
+  /roles:
+    post:
+      tags: [Roles]
+      operationId: createRole
+      summary: Create a role (admin)
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "201":
+          description: Created role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /roles/{roleId}:
+    parameters:
+      - $ref: "#/components/parameters/roleId"
+    patch:
+      tags: [Roles]
+      operationId: updateRole
+      summary: Rename a role (admin)
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "200":
+          description: Updated role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Roles]
+      operationId: deleteRole
+      summary: Delete a role (admin)
+      description: Cascades — cleared (`role_id` set to null) from any users who had it.
+      security:
+        - actorId: []
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # -------------------------------------------------------------------- labels
+  /labels:
+    post:
+      tags: [Labels]
+      operationId: createLabel
+      summary: Create a label (admin)
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, color]
+              properties:
+                name:
+                  type: string
+                color:
+                  $ref: "#/components/schemas/HexColor"
+      responses:
+        "201":
+          description: Created label
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /labels/{labelId}:
+    parameters:
+      - $ref: "#/components/parameters/labelId"
+    patch:
+      tags: [Labels]
+      operationId: updateLabel
+      summary: Update a label's name and/or color (admin)
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                color:
+                  $ref: "#/components/schemas/HexColor"
+      responses:
+        "200":
+          description: Updated label
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Label"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Labels]
+      operationId: deleteLabel
+      summary: Delete a label (admin)
+      description: Cascades — removed from `label_ids` of every card that had it.
+      security:
+        - actorId: []
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------------------- effort levels
+  /effort-levels:
+    post:
+      tags: [Effort Levels]
+      operationId: createEffortLevel
+      summary: Create an effort level (admin)
+      description: The new level is appended at the last `position`.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "201":
+          description: Created effort level
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffortLevel"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /effort-levels/reorder:
+    post:
+      tags: [Effort Levels]
+      operationId: reorderEffortLevels
+      summary: Set the order of all effort levels (admin)
+      description: >
+        `ordered_ids` is the full list of effort-level ids in the desired order;
+        `position` is reassigned to the array index. Returns the reordered list.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderBody"
+      responses:
+        "200":
+          description: Effort levels sorted by new position
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EffortLevel"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /effort-levels/{effortLevelId}:
+    parameters:
+      - $ref: "#/components/parameters/effortLevelId"
+    patch:
+      tags: [Effort Levels]
+      operationId: updateEffortLevel
+      summary: Rename an effort level (admin)
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "200":
+          description: Updated effort level
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffortLevel"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Effort Levels]
+      operationId: deleteEffortLevel
+      summary: Delete an effort level (admin)
+      description: Cascades — `effort_level_id` set to null on any card that had it.
+      security:
+        - actorId: []
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------------------------ statuses
+  /statuses:
+    post:
+      tags: [Statuses]
+      operationId: createStatus
+      summary: Create a custom status (admin)
+      description: Appended at the last `position`; `is_locked` is always false.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "201":
+          description: Created status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /statuses/reorder:
+    post:
+      tags: [Statuses]
+      operationId: reorderStatuses
+      summary: Set the order of all statuses (admin)
+      description: >
+        `ordered_ids` is the full list of status ids in the desired order;
+        `position` is reassigned to the array index. Returns the reordered list.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderBody"
+      responses:
+        "200":
+          description: Statuses sorted by new position
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Status"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /statuses/{statusId}:
+    parameters:
+      - $ref: "#/components/parameters/statusId"
+    patch:
+      tags: [Statuses]
+      operationId: updateStatus
+      summary: Rename a custom status (admin)
+      description: >
+        The three base statuses (To Do, In Progress, Done — `is_locked: true`)
+        cannot be renamed and return `409`.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "200":
+          description: Updated status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Statuses]
+      operationId: deleteStatus
+      summary: Delete a custom status (admin)
+      description: >
+        Locked base statuses cannot be deleted (`409`). Any cards in the deleted
+        status are moved to **To Do**, their `updated_at` bumped, and an activity
+        entry recorded. Remaining statuses are re-numbered.
+      security:
+        - actorId: []
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # -------------------------------------------------------------------- boards
+  /boards:
+    post:
+      tags: [Boards]
+      operationId: createBoard
+      summary: Create a board (admin)
+      description: "New boards start with the default theme and `is_archived: false`."
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NameBody"
+      responses:
+        "201":
+          description: Created board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /boards/{boardId}:
+    parameters:
+      - $ref: "#/components/parameters/boardId"
+    patch:
+      tags: [Boards]
+      operationId: updateBoard
+      summary: Rename a board and/or set its color theme (admin)
+      description: >
+        Send `name` to rename (client method `renameBoard`) and/or `theme` to
+        set the per-board colors (client method `setBoardTheme`). At least one
+        field is required.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                theme:
+                  $ref: "#/components/schemas/BoardTheme"
+      responses:
+        "200":
+          description: Updated board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/boardId"
+    post:
+      tags: [Boards]
+      operationId: archiveBoard
+      summary: Archive a board (admin)
+      description: >
+        `confirm_name` must exactly equal the board's current name (trimmed) or
+        the request fails with `422`. On success the board and all of its cards
+        get `is_archived: true`; archived-board cards become read-only.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm_name]
+              properties:
+                confirm_name:
+                  type: string
+                  description: Must match the board name exactly.
+      responses:
+        "200":
+          description: Archived board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Confirmation text does not match the board name
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /boards/{boardId}/unarchive:
+    parameters:
+      - $ref: "#/components/parameters/boardId"
+    post:
+      tags: [Boards]
+      operationId: unarchiveBoard
+      summary: Unarchive a board (admin)
+      description: Clears `is_archived` on the board and all of its cards.
+      security:
+        - actorId: []
+      responses:
+        "200":
+          description: Unarchived board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Board"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --------------------------------------------------------------------- cards
+  /boards/{boardId}/cards:
+    parameters:
+      - $ref: "#/components/parameters/boardId"
+    get:
+      tags: [Cards]
+      operationId: listCards
+      summary: List a board's cards, sorted by position
+      description: >
+        Returns every card on the board (including archived ones) ordered by
+        ascending `position`. No auth.
+      responses:
+        "200":
+          description: Cards on the board
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+    post:
+      tags: [Cards]
+      operationId: createCard
+      summary: Create a card in a column
+      description: >
+        `board_id` comes from the path. The card is appended at the end of the
+        target status column. `creator_id` is set from `X-Actor-Id`; creation
+        (and an initial assignee, if any) is written to the activity log.
+        Fails with `409` if the board is archived.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status_id, title]
+              properties:
+                status_id:
+                  $ref: "#/components/schemas/ID"
+                title:
+                  type: string
+                description:
+                  type: string
+                  default: ""
+                assignee_id:
+                  oneOf:
+                    - $ref: "#/components/schemas/ID"
+                    - type: "null"
+                  default: null
+                effort_level_id:
+                  oneOf:
+                    - $ref: "#/components/schemas/ID"
+                    - type: "null"
+                  default: null
+                label_ids:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ID"
+                  default: []
+      responses:
+        "201":
+          description: Created card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Board is archived (read-only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /cards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/cardId"
+    patch:
+      tags: [Cards]
+      operationId: updateCard
+      summary: Edit card fields
+      description: >
+        Partial update. Only supplied fields change; each meaningful change
+        appends an activity-log entry attributed to `X-Actor-Id` and bumps
+        `updated_at`. Fails with `409` if the card's board is archived or the
+        card itself is archived.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardPatch"
+      responses:
+        "200":
+          description: Updated card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Cards]
+      operationId: deleteCard
+      summary: Delete a card
+      description: Fails with `409` if the card's board (or the card) is archived.
+      security:
+        - actorId: []
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /cards/{cardId}/move:
+    parameters:
+      - $ref: "#/components/parameters/cardId"
+    post:
+      tags: [Cards]
+      operationId: moveCard
+      summary: Move a card to a status/position
+      description: >
+        Moves the card to `to_status_id` and inserts it at `to_index` within that
+        column (clamped to the column length). Positions in both the source and
+        destination columns are renormalised. An activity-log entry (moved / or
+        reordered) is recorded and `updated_at` bumped. Fails with `409` if the
+        board or card is archived.
+
+
+        **Returns the full, re-sorted card list for the card's board** — the same
+        shape as `GET /boards/{boardId}/cards`.
+      security:
+        - actorId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_status_id, to_index]
+              properties:
+                to_status_id:
+                  $ref: "#/components/schemas/ID"
+                to_index:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: All cards on the board, sorted by position
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ----------------------------------------------------------------------- dev
+  /reset:
+    post:
+      tags: [Dev]
+      operationId: resetAll
+      summary: Wipe all data and reseed (demo/dev only)
+      description: >
+        Backs the client's `resetAll()`. Optional — expose only in
+        non-production environments.
+      responses:
+        "204":
+          description: Data reset
+
+components:
+  securitySchemes:
+    actorId:
+      type: apiKey
+      in: header
+      name: X-Actor-Id
+      description: >
+        Id of the currently identified user (from `POST /users`). Not a
+        credential — no secret, no expiry — but required on all mutating
+        endpoints so the server can attribute `creator_id` and activity-log
+        entries. Requests without it on those endpoints return `401`.
+
+  parameters:
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    roleId:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    labelId:
+      name: labelId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    effortLevelId:
+      name: effortLevelId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    statusId:
+      name: statusId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    boardId:
+      name: boardId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+    cardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ID"
+
+  responses:
+    Unauthorized:
+      description: Missing or unknown `X-Actor-Id`
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: >
+        Operation not allowed in the current state — a locked base status, or a
+        card/board that is archived and read-only.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    ID:
+      type: string
+      description: Opaque server-generated identifier.
+      example: id_a1b2c3d4z9y8
+
+    HexColor:
+      type: string
+      pattern: "^#[0-9a-fA-F]{6}$"
+      example: "#2f7fe4"
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: ISO-8601 UTC timestamp.
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    NameBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    ReorderBody:
+      type: object
+      required: [ordered_ids]
+      properties:
+        ordered_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/ID"
+          description: Full set of ids in the desired order.
+
+    Role:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+
+    User:
+      type: object
+      required: [id, name, email, role_id, color, emoji, is_active]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          description: Unique (case-insensitive).
+        role_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        color:
+          $ref: "#/components/schemas/HexColor"
+        emoji:
+          type: string
+        is_active:
+          type: boolean
+
+    NewUserInput:
+      type: object
+      required: [name, email, role_id, color, emoji]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        color:
+          $ref: "#/components/schemas/HexColor"
+        emoji:
+          type: string
+
+    BoardTheme:
+      type: object
+      required: [base_color, secondary_color]
+      properties:
+        base_color:
+          $ref: "#/components/schemas/HexColor"
+        secondary_color:
+          $ref: "#/components/schemas/HexColor"
+
+    Board:
+      type: object
+      required: [id, name, is_archived, theme]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+        is_archived:
+          type: boolean
+        theme:
+          $ref: "#/components/schemas/BoardTheme"
+
+    Status:
+      type: object
+      required: [id, name, position, is_locked]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+        position:
+          type: integer
+        is_locked:
+          type: boolean
+          description: True for the base statuses To Do / In Progress / Done.
+
+    Label:
+      type: object
+      required: [id, name, color]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+        color:
+          $ref: "#/components/schemas/HexColor"
+
+    EffortLevel:
+      type: object
+      required: [id, name, position]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        name:
+          type: string
+        position:
+          type: integer
+
+    ActivityLogEntry:
+      type: object
+      required: [id, card_id, user_id, description, created_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        card_id:
+          $ref: "#/components/schemas/ID"
+        user_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+          description: The acting user (`X-Actor-Id` at the time); null if unattributed.
+        description:
+          type: string
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+
+    Card:
+      type: object
+      required:
+        - id
+        - board_id
+        - status_id
+        - title
+        - description
+        - assignee_id
+        - creator_id
+        - effort_level_id
+        - label_ids
+        - position
+        - is_archived
+        - created_at
+        - updated_at
+        - activity
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        board_id:
+          $ref: "#/components/schemas/ID"
+        status_id:
+          $ref: "#/components/schemas/ID"
+        title:
+          type: string
+        description:
+          type: string
+        assignee_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        creator_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        effort_level_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        label_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/ID"
+        position:
+          type: integer
+          description: Order within its status column on its board.
+        is_archived:
+          type: boolean
+          description: Set true when the parent board is archived.
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityLogEntry"
+
+    CardPatch:
+      type: object
+      minProperties: 1
+      description: All fields optional; only those present are changed.
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        assignee_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        effort_level_id:
+          oneOf:
+            - $ref: "#/components/schemas/ID"
+            - type: "null"
+        label_ids:
+          type: array
+          items:
+            $ref: "#/components/schemas/ID"
+
+    Bootstrap:
+      type: object
+      required: [users, roles, boards, statuses, labels, effortLevels]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/Role"
+        boards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Board"
+        statuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Status"
+          description: Sorted by ascending position.
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Label"
+        effortLevels:
+          type: array
+          items:
+            $ref: "#/components/schemas/EffortLevel"
+          description: Sorted by ascending position.

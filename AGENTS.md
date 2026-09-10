@@ -2,10 +2,14 @@ Documents
 - `_docs/process.md` - how work is organized
 
 Commands
+- `uv add <PACKAGE-NAME>` - add packages
+- `uv run python <PYTHON-FILE>` - run a Python script
 - `uv sync` - install dependencies
 - `uv run pytest` - the whole suite
+- for backend, use uv for dependency management. a few useful commands:
 
 Rules
+- regularly commit code to git
 - Dependencies are added in `pyproject.toml`. Do not add one without asking.
 - Configuration comes from the environment. A new setting means a new env var and line in `.env.example`, never a hardcoded value or a checked-in secret.
 - Tests live in `tests/`. `config/settings_test.py` supplies their environment, so production settings stay strict.
