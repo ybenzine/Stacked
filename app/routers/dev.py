@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from config.settings import get_settings
 from app.store import store
+from config.settings import get_settings
 
 router = APIRouter(tags=["Dev"])
 

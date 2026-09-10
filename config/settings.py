@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Deployment environment name: development | test | production.
     env: str = "production"
 
+    # Database connection, as a SQLAlchemy URL. SQLite by default; swap in
+    # another driver (e.g. postgresql+psycopg://…) without touching app code.
+    database_url: str = "sqlite:///./stacked.db"
+
     # Expose POST /api/reset (wipe + reseed). Must stay false in production.
     expose_dev_reset: bool = False
 

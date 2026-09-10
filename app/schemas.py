@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 HEX = r"^#[0-9a-fA-F]{6}$"
 
 
 # --------------------------------------------------------------------- entities
-class Role(BaseModel):
+class Entity(BaseModel):
+    """Base for wire entities — reads straight off ORM model instances."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Role(Entity):
     id: str
     name: str
 
 
-class User(BaseModel):
+class User(Entity):
     id: str
     name: str
     email: str
@@ -23,38 +29,38 @@ class User(BaseModel):
     is_active: bool
 
 
-class BoardTheme(BaseModel):
+class BoardTheme(Entity):
     base_color: str = Field(pattern=HEX)
     secondary_color: str = Field(pattern=HEX)
 
 
-class Board(BaseModel):
+class Board(Entity):
     id: str
     name: str
     is_archived: bool
     theme: BoardTheme
 
 
-class Status(BaseModel):
+class Status(Entity):
     id: str
     name: str
     position: int
     is_locked: bool
 
 
-class Label(BaseModel):
+class Label(Entity):
     id: str
     name: str
     color: str
 
 
-class EffortLevel(BaseModel):
+class EffortLevel(Entity):
     id: str
     name: str
     position: int
 
 
-class ActivityLogEntry(BaseModel):
+class ActivityLogEntry(Entity):
     id: str
     card_id: str
     user_id: str | None
@@ -62,7 +68,7 @@ class ActivityLogEntry(BaseModel):
     created_at: str
 
 
-class Card(BaseModel):
+class Card(Entity):
     id: str
     board_id: str
     status_id: str
@@ -79,7 +85,7 @@ class Card(BaseModel):
     activity: list[ActivityLogEntry]
 
 
-class Bootstrap(BaseModel):
+class Bootstrap(Entity):
     users: list[User]
     roles: list[Role]
     boards: list[Board]

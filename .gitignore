@@ -34,5 +34,7 @@ dist-ssr
 __pycache__
 *.pyc
 db.sqlite3
+*.db
+stacked.db
 .env
 .pytest_cache

@@ -11,6 +11,7 @@ import os
 
 os.environ.setdefault("STACKED_ENV", "test")
 os.environ.setdefault("STACKED_EXPOSE_DEV_RESET", "true")
+os.environ.setdefault("STACKED_DATABASE_URL", "sqlite://")  # shared in-memory
 
 from config.settings import get_settings  # noqa: E402
 
