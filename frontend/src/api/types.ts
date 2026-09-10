@@ -24,10 +24,16 @@ export interface User {
   is_active: boolean;
 }
 
+export interface BoardTheme {
+  base_color: string; // hex — drives primary/brand accents on the board
+  secondary_color: string; // hex — drives the secondary/highlight accent
+}
+
 export interface Board {
   id: ID;
   name: string;
   is_archived: boolean;
+  theme: BoardTheme;
 }
 
 export interface Status {

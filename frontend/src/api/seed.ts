@@ -1,5 +1,6 @@
 import type {
   Board,
+  BoardTheme,
   Card,
   EffortLevel,
   Label,
@@ -7,6 +8,25 @@ import type {
   Status,
   User,
 } from "./types";
+
+/** Named starting points offered in the admin theme picker. */
+export interface BoardThemePreset extends BoardTheme {
+  name: string;
+}
+
+export const BOARD_THEME_PRESETS: BoardThemePreset[] = [
+  { name: "Ocean", base_color: "#2f7fe4", secondary_color: "#f7c948" },
+  { name: "Forest", base_color: "#16a34a", secondary_color: "#d97706" },
+  { name: "Sunset", base_color: "#ea580c", secondary_color: "#db2777" },
+  { name: "Grape", base_color: "#7c3aed", secondary_color: "#06b6d4" },
+  { name: "Slate", base_color: "#475569", secondary_color: "#0ea5e9" },
+  { name: "Rose", base_color: "#e11d48", secondary_color: "#f59e0b" },
+];
+
+export const DEFAULT_BOARD_THEME: BoardTheme = {
+  base_color: BOARD_THEME_PRESETS[0].base_color,
+  secondary_color: BOARD_THEME_PRESETS[0].secondary_color,
+};
 
 export const uid = (): string =>
   "id_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -92,9 +112,30 @@ export function buildSeed(): DB {
   ];
 
   const boards: Board[] = [
-    { id: "board_eng", name: "Engineering", is_archived: false },
-    { id: "board_mkt", name: "Marketing Launch", is_archived: false },
-    { id: "board_old", name: "2023 Cleanup", is_archived: true },
+    {
+      id: "board_eng",
+      name: "Engineering",
+      is_archived: false,
+      theme: { ...DEFAULT_BOARD_THEME },
+    },
+    {
+      id: "board_mkt",
+      name: "Marketing Launch",
+      is_archived: false,
+      theme: {
+        base_color: BOARD_THEME_PRESETS[2].base_color,
+        secondary_color: BOARD_THEME_PRESETS[2].secondary_color,
+      },
+    },
+    {
+      id: "board_old",
+      name: "2023 Cleanup",
+      is_archived: true,
+      theme: {
+        base_color: BOARD_THEME_PRESETS[4].base_color,
+        secondary_color: BOARD_THEME_PRESETS[4].secondary_color,
+      },
+    },
   ];
 
   const t = now();

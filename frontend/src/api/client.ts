@@ -7,10 +7,11 @@
  * `fetch(...)` calls — the signatures and return types are the contract.
  */
 
-import { buildSeed, now, uid, type DB } from "./seed";
+import { buildSeed, DEFAULT_BOARD_THEME, now, uid, type DB } from "./seed";
 import type {
   ActivityLogEntry,
   Board,
+  BoardTheme,
   Bootstrap,
   Card,
   CardPatch,
@@ -48,13 +49,21 @@ class MockBackend {
   private load(): DB {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw) as DB;
+      if (raw) return this.migrate(JSON.parse(raw) as DB);
     } catch {
       /* ignore corrupt storage */
     }
     const seed = buildSeed();
     this.persist(seed);
     return seed;
+  }
+
+  /** Backfill fields added after data was first persisted to this browser. */
+  private migrate(db: DB): DB {
+    for (const b of db.boards) {
+      if (!b.theme) b.theme = { ...DEFAULT_BOARD_THEME };
+    }
+    return db;
   }
 
   private persist(db: DB = this.db) {
@@ -304,8 +313,21 @@ class MockBackend {
   // ---- boards --------------------------------------------------
 
   async createBoard(name: string): Promise<Board> {
-    const b: Board = { id: uid(), name: name.trim(), is_archived: false };
+    const b: Board = {
+      id: uid(),
+      name: name.trim(),
+      is_archived: false,
+      theme: { ...DEFAULT_BOARD_THEME },
+    };
     this.db.boards.push(b);
+    this.save();
+    return delay(clone(b));
+  }
+
+  async setBoardTheme(id: ID, theme: BoardTheme): Promise<Board> {
+    const b = this.db.boards.find((x) => x.id === id);
+    if (!b) throw new Error("no board");
+    b.theme = { base_color: theme.base_color, secondary_color: theme.secondary_color };
     this.save();
     return delay(clone(b));
   }
@@ -553,6 +575,7 @@ export const api = {
 
   createBoard: (name: string) => backend.createBoard(name),
   renameBoard: (id: ID, name: string) => backend.renameBoard(id, name),
+  setBoardTheme: (id: ID, theme: BoardTheme) => backend.setBoardTheme(id, theme),
   archiveBoard: (id: ID, typedName: string) => backend.archiveBoard(id, typedName),
   unarchiveBoard: (id: ID) => backend.unarchiveBoard(id),
 

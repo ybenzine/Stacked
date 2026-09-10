@@ -153,12 +153,15 @@ label.field > span {
 }
 .filter-bar input:hover { border-color: var(--primary); }
 
+.board-view { background: var(--bg); min-height: 100%; }
+
 .columns {
   display: flex;
   gap: 14px;
   padding: 18px 16px 24px;
   align-items: flex-start;
   min-height: 200px;
+  background: var(--bg);
 }
 
 .column {
@@ -331,6 +334,59 @@ label.field > span {
   padding: 1px 5px;
 }
 .add-row { display: flex; gap: 6px; margin-top: 10px; }
+
+/* board theme editor */
+.board-admin-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 6px;
+}
+.board-admin-row > .admin-item { border: none; background: transparent; padding: 4px; }
+.board-theme {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 4px 4px;
+}
+.board-theme-preview {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.board-theme-preview .swatch { width: 18px; height: 18px; border: none; }
+.board-theme-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.board-theme-field input[type="color"] {
+  width: 34px;
+  height: 26px;
+  padding: 2px;
+}
+.board-theme-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.board-theme-presets .chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.preset-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
 
 .activity-log {
   border-top: 1px solid var(--border);

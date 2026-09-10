@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../state/store";
 import type { Card, Status } from "../api/types";
-import { Avatar, EffortPill, LabelPill } from "./ui";
+import { Avatar, boardThemeVars, EffortPill, LabelPill } from "./ui";
 import { CardDialog } from "./CardDialog";
 
 interface Filters {
@@ -108,7 +108,7 @@ export function BoardView() {
   }
 
   return (
-    <div>
+    <div className="board-view" style={boardThemeVars(currentBoard.theme)}>
       {readOnly && (
         <div className="banner">
           “{currentBoard.name}” is archived. Cards are read-only — unarchive it from the

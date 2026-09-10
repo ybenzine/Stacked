@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
-import { COLOR_CHOICES, Avatar } from "./ui";
+import { COLOR_CHOICES, Avatar, boardThemeVars } from "./ui";
+import { BOARD_THEME_PRESETS } from "../api/seed";
+import type { Board, BoardTheme } from "../api/types";
 import { Modal } from "./Modal";
 
 export function AdminPage() {
@@ -42,6 +44,7 @@ export function AdminPage() {
         onRename={(id, n) => api.renameBoard(id, n).then(refresh)}
         onArchive={(id, typed) => api.archiveBoard(id, typed).then(refresh)}
         onUnarchive={(id) => api.unarchiveBoard(id).then(refresh)}
+        onSetTheme={(id, theme) => api.setBoardTheme(id, theme).then(refresh)}
       />
 
       {/* ---- Statuses ---- */}
@@ -323,13 +326,15 @@ function BoardsSection({
   onRename,
   onArchive,
   onUnarchive,
+  onSetTheme,
 }: {
-  boards: { id: string; name: string; is_archived: boolean }[];
+  boards: Board[];
   currentBoardId: string | null;
   onCreate: (name: string) => void;
   onRename: (id: string, name: string) => void;
   onArchive: (id: string, typed: string) => Promise<unknown>;
   onUnarchive: (id: string) => void;
+  onSetTheme: (id: string, theme: BoardTheme) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<{ id: string; name: string } | null>(
@@ -346,16 +351,18 @@ function BoardsSection({
       <h3>Boards</h3>
       <div className="admin-list">
         {active.map((b) => (
-          <EditableRow
-            key={b.id}
-            name={b.name + (b.id === currentBoardId ? "  (viewing)" : "")}
-            onRename={(n) => onRename(b.id, n.replace(/\s+\(viewing\)$/, ""))}
-            onDelete={() => {
-              setArchiveTarget({ id: b.id, name: b.name });
-              setTyped("");
-              setErr(null);
-            }}
-          />
+          <div key={b.id} className="board-admin-row">
+            <EditableRow
+              name={b.name + (b.id === currentBoardId ? "  (viewing)" : "")}
+              onRename={(n) => onRename(b.id, n.replace(/\s+\(viewing\)$/, ""))}
+              onDelete={() => {
+                setArchiveTarget({ id: b.id, name: b.name });
+                setTyped("");
+                setErr(null);
+              }}
+            />
+            <BoardThemeEditor theme={b.theme} onChange={(t) => onSetTheme(b.id, t)} />
+          </div>
         ))}
       </div>
       <form
@@ -427,6 +434,77 @@ function BoardsSection({
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+/* ---------------- board theme ---------------- */
+
+function BoardThemeEditor({
+  theme,
+  onChange,
+}: {
+  theme: BoardTheme;
+  onChange: (theme: BoardTheme) => void;
+}) {
+  const activePreset = BOARD_THEME_PRESETS.find(
+    (p) =>
+      p.base_color.toLowerCase() === theme.base_color.toLowerCase() &&
+      p.secondary_color.toLowerCase() === theme.secondary_color.toLowerCase(),
+  );
+
+  return (
+    <div className="board-theme">
+      <span
+        className="board-theme-preview"
+        style={boardThemeVars(theme)}
+        aria-hidden="true"
+      >
+        <span className="swatch" style={{ background: "var(--primary)" }} />
+        <span className="swatch" style={{ background: "var(--accent)" }} />
+      </span>
+
+      <label className="board-theme-field">
+        <span>Base</span>
+        <input
+          type="color"
+          value={theme.base_color}
+          onChange={(e) => onChange({ ...theme, base_color: e.target.value })}
+        />
+      </label>
+      <label className="board-theme-field">
+        <span>Secondary</span>
+        <input
+          type="color"
+          value={theme.secondary_color}
+          onChange={(e) => onChange({ ...theme, secondary_color: e.target.value })}
+        />
+      </label>
+
+      <span className="board-theme-presets">
+        {BOARD_THEME_PRESETS.map((p) => (
+          <button
+            key={p.name}
+            type="button"
+            className={"chip-toggle" + (activePreset?.name === p.name ? " on" : "")}
+            title={`${p.name} — ${p.base_color} / ${p.secondary_color}`}
+            onClick={() =>
+              onChange({
+                base_color: p.base_color,
+                secondary_color: p.secondary_color,
+              })
+            }
+          >
+            <span
+              className="preset-dot"
+              style={{
+                background: `linear-gradient(135deg, ${p.base_color} 0 50%, ${p.secondary_color} 50% 100%)`,
+              }}
+            />
+            {p.name}
+          </button>
+        ))}
+      </span>
     </div>
   );
 }
